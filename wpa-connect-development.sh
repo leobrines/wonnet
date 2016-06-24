@@ -1,43 +1,42 @@
 #!/bin/bash
 
-# pathectory of wpa_supplicant
-pathSupplicant=/etc/wpa_supplicant
-
-# interfaces configurations
-pathIfaces=/etc/network/interfaces.d
+# wpa_supplicant configuration
+pathSupplicant=/etc/wpa_supplicant/wpa_supplicant.conf
 
 # wiface = wireless interface
 wiface=$(iw dev | grep Interface | cut -f 2 -d " ")
 
-if [[ $wiface ]]; then
-	echo -e "There is a wireless interface ($wiface)"
+# wireless interface configuration
+pathWiface=/etc/network/interfaces.d/$wiface
 
+scanAPs () {
 	# Check if wireless interface is up or down
 	if [ -n "$(ip link show $wiface | grep ,UP)" ]; then
-		echo "$wiface is up"
+		echo "$wiface is already up"
 	else
 		echo "$wiface is down"
 		echo "Setting up wireless interface..."
 		ip link set $wiface up
 	fi
 
-	echo "Scanning access points..."
 	# Scan access points with wireless interface and save them in an array
+	echo "Scanning access points..."
 	ssids=($(iw dev $wiface scan | grep SSID | cut -f 2 -d " "))
 
 	echo
+}
 
+showAPs (){
 	echo "Access points available:"
 
-	# Show all scanned access points
 	n=1
 	for ssid in ${ssids[@]}; do
 		echo "$n) $ssid"
 		((n++))
 	done
+}
 
-	echo
-
+chooseAP () {
 	read -p "Choose an access point: " index
 
 	# Rest one chosen number to be index of the array of access points 
@@ -47,61 +46,65 @@ if [[ $wiface ]]; then
 
 	myssid=${ssids[$index]}
 
-	echo
-
-	# Set down wireless interface to set his type to ibss
-	echo "Setting down wireless interface..."
-	ip link set $wiface down
-
-	echo "Setting interface type to ibss..."
-	iw dev $wiface set type ibss
-
-	echo
-
 	read -sp "Password of \"$myssid\": " password; echo
-	
-	# Create or modify all file, write a configuration file interface
-	echo -e "auto $wiface\niface $wiface inet dhcp
-	wpa-conf $pathSupplicant/$myssid.conf" > $pathIfaces/$wiface
+}
 
-	echo
+writeConfigurationFiles () {
+	# Interface file
+	echo "Writing $pathWiface"
 
-	echo "Creating $pathSupplicant/$myssid.conf"
+	echo "
+auto $wiface
+iface $wiface inet dhcp
+	wpa-key-mgmt WPA-PSK
+	wpa-group TKIP CCMP
+	wpa-conf $pathSupplicant" > $pathWiface
 
-	echo -e "ctrl_interface=/var/run/wpa_supplicant\n" > $pathSupplicant/$myssid.conf
-	# Write ssid and password of the chosen access point
-	wpa_passphrase $myssid $password >> $pathSupplicant/$myssid.conf
+	# wpa_supplicant file
+	echo "Writing $pathSupplicant"
+
+	wpa_passphrase $myssid $password > $pathSupplicant
 
 	# Only root can be do anything with the file
-	chmod 000 $pathSupplicant/$myssid.conf
+	chmod 600 $pathWiface
+	chmod 600 $pathSupplicant
+}
 
-	# If the wireless interface is already running, then it'll be removed to run wpa_supplicant
-	if [ -e /var/run/wpa_supplicant/$wiface ]; then
-		echo "Removing /var/run/wpa_supplicant/$wiface"
-		rm /var/run/wpa_supplicant/$wiface
-	fi
+association () {
+	#ifdown $wiface
+	#ifup $wiface
 
-	# Set up wireless interface to start wpa_supplicant
-	echo "Setting up interface..."
-	ip link set $wiface up
+	#/etc/init.d/networking restart
+	#echo
 
-	echo "Starting wpa_supplicant..."
-
-	echo
-	
-	# Run wpa_supplicant to connect to the access point
-	wpa_supplicant -i $wiface -c $pathSupplicant/$myssid.conf -D nl80211
-
-	echo
-
-	# For reset current network
-	/etc/init.d/networking restart
-	
-	echo
-
-	# For know if there was a successful connection
-	echo "Link status: "
+	# Know if there was a successful connection
+	echo "Wireless interface status: "
 	iw dev $wiface link
+}
+
+if [[ $wiface ]]; then
+	echo -e "There is a wireless interface ($wiface)"
+	echo
+
+	scanAPs
+	echo
+
+	rm /var/run/wpa_supplicant/$wiface
+	ifdown $wiface
+	echo
+
+	showAPs
+	echo
+	chooseAP
+	echo
+
+	writeConfigurationFiles
+	echo
+
+	ifup $wiface
+	echo
+
+	association
 else
 	echo "There is not a wireless interface";
 fi
