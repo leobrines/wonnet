@@ -10,24 +10,9 @@ pathIfaces=/etc/network/interfaces.d
 wiface=$(iw dev | grep Interface | cut -f 2 -d " ")
 
 showTitle (){
-	local cols=$(tput cols)
-	local rows=$(tput lines)
-
-	local message="WPA Connect"
-	local message_length=${#message}
-	local half_message_length=$(($message_length / 2))
-
-	pos_x=$(( $cols / 2 ))
-	pos_y=$(( ($rows / 2) - $half_message_length ))
-
-	tput clear
-	tput cup $pos_x $pos_y
-
 	tput bold
-	echo $message
-	
+	echo "Wireless network connection"
 	tput sgr0
-	tput cup $rows 0
 }
 
 scanAPs () {
@@ -111,6 +96,7 @@ association () {
 	iw dev $wiface link
 }
 
+echo
 showTitle
 
 if [[ $wiface ]]; then
