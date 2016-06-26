@@ -68,7 +68,7 @@ iface $wiface inet dhcp
 
 association () {
 	# Adjust operating mode
-	echo "Setting down wireless interface..."
+	echo "Bringing down wireless interface..."
 	ip link set $wiface down
 
 	echo "Setting interface type to ibss..."
@@ -80,11 +80,16 @@ association () {
 		rm /var/run/wpa_supplicant/$wiface
 	fi
 
+	echo
+
 	# Run wpa_supplicant to connect to the access point
 	echo "Starting wpa_supplicant..."
 	wpa_supplicant -D nl80211,wext -i $wiface -c $pathSupplicant
 
+	echo
+
 	# Bring up Wireless interface
+	echo "Bringing up interface..."
 	ip link set $wiface up
 	
 	# Reset current network
