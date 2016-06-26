@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# pathectory of wpa_supplicant
-pathSupplicant=/etc/wpa_supplicant
-
-# interfaces configurations
-pathIfaces=/etc/network/interfaces.d
+# wpa_supplicant configuration
+pathSupplicant=/etc/wpa_supplicant/wpa_supplicant.conf
 
 # wiface = wireless interface
 wiface=$(iw dev | grep Interface | cut -f 2 -d " ")
+
+# wireless interface configuration
+pathWiface=/etc/network/interfaces.d/$wiface
 
 showTitle (){
 	tput bold
@@ -26,8 +26,6 @@ scanAPs () {
 }
 
 showAPs (){
-	echo
-
 	echo "Access points available:"
 
 	n=1
@@ -35,8 +33,6 @@ showAPs (){
 		echo "$n) $ssid"
 		((n++))
 	done
-
-	echo
 }
 
 chooseAP () {
@@ -50,43 +46,44 @@ chooseAP () {
 	myssid=${ssids[$index]}
 
 	read -sp "Password of \"$myssid\": " password; echo
-
-	echo
 }
 
 writeConfigurationFiles () {
 	# Interface file
-	echo -e "auto $wiface\niface $wiface inet dhcp
-	wpa-conf $pathSupplicant/$myssid.conf" > $pathIfaces/$wiface
+	echo "
+auto $wiface
+iface $wiface inet dhcp
+	wpa-conf $pathSupplicant" > $pathWiface
 
-	# Access point file
-	echo -e "ctrl_interface=/var/run/wpa_supplicant\n" > $pathSupplicant/$myssid.conf
-	wpa_passphrase $myssid $password >> $pathSupplicant/$myssid.conf
+	# wpa_supplicant file
+	wpa_passphrase $myssid $password > $pathSupplicant
+
 
 	# Only root can be do anything with the file
-	chmod 000 $pathSupplicant/$myssid.conf
-}
-
-adjustOperatingMode () {
-	ip link set $wiface down
-	iw dev $wiface set type ibss
+	chmod 000 $pathWiface
+	chmod 000 $pathSupplicant
 }
 
 association () {
 	echo "Connecting..."
+	# Adjust operating mode
+	ip link set $wiface down
+	iw dev $wiface set type ibss
+	
 	# Remove runtime data wpa_supplicant
 	if [ -e /var/run/wpa_supplicant/$wiface ]; then
-		rm /var/run/wpa_supplicant/$wiface
+		rm /var/run/wpa_supplicant/$wiface > /dev/null
 	fi
 
 	# Run wpa_supplicant to connect to the access point
-	wpa_supplicant -q -i $wiface -c $pathSupplicant/$myssid.conf -D nl80211,wext > /dev/null
+	wpa_supplicant -q -i $wiface -c $pathSupplicant -D nl80211,wext > /dev/null
 
-	# Set up wireless interface to start wpa_supplicant
+	# Bring up Wireless interface
 	ip link set $wiface up
-
+	
 	# Reset current network
 	echo "Restarting network..."
+	systemctl daemon-reload > /dev/null
 	/etc/init.d/networking restart > /dev/null
 	
 	echo
@@ -97,16 +94,22 @@ association () {
 }
 
 echo
+
 showTitle
+
+echo # --------------------------------------------
 
 if [[ $wiface ]]; then
 	scanAPs
+
 	showAPs
+	echo
 	chooseAP
-	
+
 	writeConfigurationFiles
 
-	adjustOperatingMode
+	echo
+
 	association
 else
 	echo "There is not a wireless interface";
