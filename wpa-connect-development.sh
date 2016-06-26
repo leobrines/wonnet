@@ -22,8 +22,6 @@ scanAPs () {
 	# Scan access points with wireless interface and save them in an array
 	echo "Scanning access points..."
 	ssids=($(iw dev $wiface scan | grep SSID | cut -f 2 -d " "))
-
-	echo
 }
 
 showAPs (){
@@ -56,26 +54,47 @@ writeConfigurationFiles () {
 	echo "
 auto $wiface
 iface $wiface inet dhcp
-	wpa-key-mgmt WPA-PSK
-	wpa-group TKIP CCMP
 	wpa-conf $pathSupplicant" > $pathWiface
 
 	# wpa_supplicant file
 	echo "Writing $pathSupplicant"
-
 	wpa_passphrase $myssid $password > $pathSupplicant
 
+
 	# Only root can be do anything with the file
-	chmod 600 $pathWiface
-	chmod 600 $pathSupplicant
+	chmod 000 $pathWiface
+	chmod 000 $pathSupplicant
 }
 
 association () {
-	#ifdown $wiface
-	#ifup $wiface
+	# Adjust operating mode
+	echo "Setting down wireless interface..."
+	ip link set $wiface down
 
-	#/etc/init.d/networking restart
-	#echo
+	echo "Setting interface type to ibss..."
+	iw dev $wiface set type ibss
+	
+	# Remove runtime data wpa_supplicant
+	if [ -e /var/run/wpa_supplicant/$wiface ]; then
+		echo "Removing /var/run/wpa_supplicant/$wiface"
+		rm /var/run/wpa_supplicant/$wiface
+	fi
+
+	# Run wpa_supplicant to connect to the access point
+	echo "Starting wpa_supplicant..."
+	wpa_supplicant -D nl80211,wext -i $wiface -c $pathSupplicant
+
+	# Bring up Wireless interface
+	ip link set $wiface up
+	
+	# Reset current network
+	echo "Reloading systemctl daemon..."
+	systemctl daemon-reload
+
+	echo "Restarting network..."
+	/etc/init.d/networking restart
+	
+	echo
 
 	# Know if there was a successful connection
 	echo "Wireless interface status: "
@@ -84,25 +103,22 @@ association () {
 
 if [[ $wiface ]]; then
 	echo -e "There is a wireless interface ($wiface)"
-	echo
+
+	echo # --------------------------------------------
 
 	scanAPs
-	echo
 
-	rm /var/run/wpa_supplicant/$wiface
-	ifdown $wiface
-	echo
+	echo # --------------------------------------------
 
 	showAPs
 	echo
 	chooseAP
-	echo
+
+	echo # --------------------------------------------
 
 	writeConfigurationFiles
-	echo
 
-	ifup $wiface
-	echo
+	echo # --------------------------------------------
 
 	association
 else
