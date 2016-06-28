@@ -18,11 +18,19 @@ showTitle (){
 scanAPs () {
 	# Check if wireless interface is up or down
 	if [ ! -n "$(ip link show $wiface | grep ,UP)" ]; then
+		echo "$wiface is down"
+		echo "Setting up wireless interface..."
 		ip link set $wiface up
 	fi
 
 	# Scan access points with wireless interface and save them in an array
+	echo "Scanning access points..."
 	ssids=($(iw dev $wiface scan | grep SSID | cut -f 2 -d " "))
+}
+
+downNetwork (){
+	rm /var/run/wpa_supplicant/$wiface &> /dev/null
+	ifdown $wiface &> /dev/null
 }
 
 showAPs (){
@@ -53,39 +61,22 @@ writeConfigurationFiles () {
 	echo "
 auto $wiface
 iface $wiface inet dhcp
+	wpa-key-mgmt WPA-PSK
+	wpa-group TKIP CCMP
 	wpa-conf $pathSupplicant" > $pathWiface
 
 	# wpa_supplicant file
 	wpa_passphrase $myssid $password > $pathSupplicant
 
-
 	# Only root can be do anything with the file
-	chmod 000 $pathWiface
-	chmod 000 $pathSupplicant
+	chmod 600 $pathWiface
+	chmod 600 $pathSupplicant
 }
 
 association () {
 	echo "Connecting..."
-	# Adjust operating mode
-	ip link set $wiface down
-	iw dev $wiface set type ibss
-	
-	# Remove runtime data wpa_supplicant
-	if [ -e /var/run/wpa_supplicant/$wiface ]; then
-		rm /var/run/wpa_supplicant/$wiface > /dev/null
-	fi
+	ifup $wiface
 
-	# Run wpa_supplicant to connect to the access point
-	wpa_supplicant -q -i $wiface -c $pathSupplicant -D nl80211,wext > /dev/null
-
-	# Bring up Wireless interface
-	ip link set $wiface up
-	
-	# Reset current network
-	echo "Restarting network..."
-	systemctl daemon-reload > /dev/null
-	/etc/init.d/networking restart > /dev/null
-	
 	echo
 
 	# Know if there was a successful connection
@@ -97,19 +88,21 @@ echo
 
 showTitle
 
-echo # --------------------------------------------
+echo
 
 if [[ $wiface ]]; then
 	scanAPs
+	downNetwork	
+
+	echo #------------------------------------------------
 
 	showAPs
 	echo
 	chooseAP
 
+	echo #------------------------------------------------
+
 	writeConfigurationFiles
-
-	echo
-
 	association
 else
 	echo "There is not a wireless interface";

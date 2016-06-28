@@ -9,6 +9,12 @@ wiface=$(iw dev | grep Interface | cut -f 2 -d " ")
 # wireless interface configuration
 pathWiface=/etc/network/interfaces.d/$wiface
 
+showTitle (){
+	tput bold
+	echo "Wireless network connection"
+	tput sgr0
+}
+
 scanAPs () {
 	# Check if wireless interface is up or down
 	if [ -n "$(ip link show $wiface | grep ,UP)" ]; then
@@ -22,6 +28,17 @@ scanAPs () {
 	# Scan access points with wireless interface and save them in an array
 	echo "Scanning access points..."
 	ssids=($(iw dev $wiface scan | grep SSID | cut -f 2 -d " "))
+}
+
+downNetwork (){
+	echo "Removing runtime data of wpa_supplicant..."
+	rm /var/run/wpa_supplicant/$wiface
+
+	echo
+
+	echo "Bringing down interface..."
+	echo
+	ifdown $wiface
 }
 
 showAPs (){
@@ -50,55 +67,27 @@ chooseAP () {
 writeConfigurationFiles () {
 	# Interface file
 	echo "Writing $pathWiface"
-
 	echo "
 auto $wiface
 iface $wiface inet dhcp
+	wpa-key-mgmt WPA-PSK
+	wpa-group TKIP CCMP
 	wpa-conf $pathSupplicant" > $pathWiface
 
 	# wpa_supplicant file
-	echo "Writing $pathSupplicant"
+	echo "Writing $pathSupplicant..."
 	wpa_passphrase $myssid $password > $pathSupplicant
 
-
 	# Only root can be do anything with the file
-	chmod 000 $pathWiface
-	chmod 000 $pathSupplicant
+	chmod 600 $pathWiface
+	chmod 600 $pathSupplicant
 }
 
 association () {
-	# Adjust operating mode
-	echo "Bringing down wireless interface..."
-	ip link set $wiface down
-
-	echo "Setting interface type to ibss..."
-	iw dev $wiface set type ibss
-	
-	# Remove runtime data wpa_supplicant
-	if [ -e /var/run/wpa_supplicant/$wiface ]; then
-		echo "Removing /var/run/wpa_supplicant/$wiface"
-		rm /var/run/wpa_supplicant/$wiface
-	fi
-
-	echo
-
-	# Run wpa_supplicant to connect to the access point
-	echo "Starting wpa_supplicant..."
-	wpa_supplicant -D nl80211,wext -i $wiface -c $pathSupplicant
-
-	echo
-
-	# Bring up Wireless interface
 	echo "Bringing up interface..."
-	ip link set $wiface up
-	
-	# Reset current network
-	echo "Reloading systemctl daemon..."
-	systemctl daemon-reload
+	echo
+	ifup $wiface
 
-	echo "Restarting network..."
-	/etc/init.d/networking restart
-	
 	echo
 
 	# Know if there was a successful connection
@@ -106,24 +95,34 @@ association () {
 	iw dev $wiface link
 }
 
+echo
+
+showTitle
+
+echo
+
 if [[ $wiface ]]; then
 	echo -e "There is a wireless interface ($wiface)"
 
-	echo # --------------------------------------------
+	echo #------------------------------------------------
 
 	scanAPs
 
-	echo # --------------------------------------------
+	echo #------------------------------------------------
+
+	downNetwork	
+
+	echo #------------------------------------------------
 
 	showAPs
 	echo
 	chooseAP
 
-	echo # --------------------------------------------
+	echo #------------------------------------------------
 
 	writeConfigurationFiles
 
-	echo # --------------------------------------------
+	echo #------------------------------------------------
 
 	association
 else
