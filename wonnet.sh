@@ -17,6 +17,7 @@ showTitle (){
 
 scanAPs () {
 	# Restart network
+	echo "Restarting networking..."
 	service networking restart
 
 	# Check if wireless interface is up or down
