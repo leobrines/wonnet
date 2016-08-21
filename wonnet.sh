@@ -16,6 +16,9 @@ showTitle (){
 }
 
 scanAPs () {
+	# Restart network
+	service networking restart
+
 	# Check if wireless interface is up or down
 	if [ -n "$(ip link show $wiface | grep ,UP)" ]; then
 		echo "$wiface is already up"
@@ -23,6 +26,8 @@ scanAPs () {
 		echo "$wiface is down"
 		echo "Setting up wireless interface..."
 		ip link set $wiface up
+
+		sleep 5
 	fi
 
 	# Scan access points with wireless interface and save them in an array
@@ -39,6 +44,8 @@ downNetwork (){
 	echo "Bringing down interface..."
 	echo
 	ifdown $wiface
+
+	sleep 5
 }
 
 showAPs (){
