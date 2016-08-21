@@ -4,15 +4,15 @@ A bash script to connect to wireless network via a CLI, for shell lovers. The ou
 
 ## Test
 
-* Download the repository
-* Go to project directory
-* On your terminal, run:
+1. Download the repository
+2. Go to project root path
+3. On your terminal, run:
 
-```sh
-./wonnet-development.sh
-```
+	```sh
+	./wonnet.sh
+	```
 
-* Let me know if you have any errors or problems
+4. Let me know if you had any error or problem
 
 ## Meta
 
